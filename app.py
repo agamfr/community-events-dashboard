@@ -339,7 +339,7 @@ with tab1:
     ).value_counts().reset_index()
 
     
-        meal_counts.columns = ["סוג ארוחה", "מספר משתתפים"]
+    meal_counts.columns = ["סוג ארוחה", "מספר משתתפים"]
 
 
     st.subheader("סוגי ארוחות")
