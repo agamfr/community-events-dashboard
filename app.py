@@ -175,7 +175,10 @@ def assign_buses(families, capacity):
             waiting.append(family)
 
     # Create buses only when enough people are waiting
-    while sum(len(f["members"]) for f in waiting) >= MIN_NEW_BUS_PASSENGERS:
+while waiting and (
+    not buses
+    or sum(len(f["members"]) for f in waiting) >= MIN_NEW_BUS_PASSENGERS
+):       
         group = []
         seats = capacity
 
