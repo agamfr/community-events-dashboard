@@ -219,7 +219,7 @@ while waiting and (
                 "pickup": pickup
             }
 
-    # Families still waiting
+    #     Families still waiting
     for family in waiting:
         assignments[family["id"]] = {
             "status": "ממתין לשיבוץ",
