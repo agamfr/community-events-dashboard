@@ -5,6 +5,7 @@ import math
 import json
 import requests
 import re
+import plotly.express as px
 st.set_page_config(
     page_title="ניהול אירוע קהילתי",
     page_icon="🚌",
@@ -308,21 +309,56 @@ with tab1:
     c3.metric("זקוקים להסעה", transport_people)
     c4.metric("אוטובוסים", len(buses))
 
-    neighborhood_counts = pd.Series(
-        [f["neighborhood"] for f in families]
-    ).value_counts().reindex(
-        NEIGHBORHOODS, fill_value=0
-    )
+   
+    neighborhood_counts = pd.DataFrame({
+        "שכונה": NEIGHBORHOODS,
+        "מספר משפחות": [
+            sum(f["neighborhood"] == n for f in families)
+            for n in NEIGHBORHOODS
+        ]
+    })
 
     st.subheader("הרשמות לפי שכונה")
-    st.bar_chart(neighborhood_counts)
+    fig = px.bar(
+        neighborhood_counts,
+        x="שכונה",
+        y="מספר משפחות",
+        text="מספר משפחות"
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(
+        font=dict(size=18),
+        showlegend=False
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
+
+   
     meal_counts = pd.Series(
-        [m["meal"] for m in all_members]
-    ).value_counts()
+        [m["meal"] for m in all_members if m.get("meal")]
+    ).value_counts().reset_index()
+
+    
+        meal_counts.columns = ["סוג ארוחה", "מספר משתתפים"]
+
 
     st.subheader("סוגי ארוחות")
-    st.bar_chart(meal_counts)
+
+    if not meal_counts.empty:
+        fig = px.bar(
+            meal_counts,
+            x="סוג ארוחה",
+            y="מספר משתתפים",
+            text="מספר משתתפים"
+        )
+        fig.update_traces(textposition="outside")
+        fig.update_layout(
+            font=dict(size=18),
+            showlegend=False
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("אין נתונים להצגה")
 
     allergies = [
         str(m.get("allergy", "")).strip()
@@ -331,17 +367,34 @@ with tab1:
         and str(m.get("allergy") or "").strip() not in ("אין", "ללא", "לא", "אין אלרגיה")
     ]
 
+   
     st.subheader("אלרגיות ומגבלות שדווחו")
+
     if allergies:
         allergy_counts = pd.Series(allergies).value_counts()
         allergy_table = pd.DataFrame({
-            "אלרגיה / מגבלה כפי שדווחה": allergy_counts.index,
-            "מספר דיווחים": allergy_counts.values,
+            "אלרגיה או מגבלה": allergy_counts.index,
+            "מספר דיווחים": allergy_counts.values
         })
-        st.dataframe(allergy_table, hide_index=True, use_container_width=True)
-        st.caption("הנתונים מוצגים כפי שהוזנו בטופס; מומלץ לבדוק את פירוט המגבלות לפני האירוע.")
+
+        fig = px.bar(
+            allergy_table,
+            x="אלרגיה או מגבלה",
+            y="מספר דיווחים",
+            text="מספר דיווחים"
+        )
+
+        fig.update_traces(textposition="outside")
+        fig.update_layout(
+            font=dict(size=18),
+            showlegend=False
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption("הנתונים מבוססים על הדיווחים בטופס.")
+
     else:
-        st.info("לא נמצאו פירוטי אלרגיות בשדות שנקראו; יש לבדוק גם את התשובות המקוריות")
+        st.info("לא נמצאו דיווחי אלרגיות עם פירוט")
 
 with tab2:
     st.subheader("כרטיסי משפחות")
