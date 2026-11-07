@@ -104,9 +104,7 @@ for index, row in enumerate(registrations, start=1):
         st.warning(f"הרשמה {index}: לא זוהה מספר משתתפים. יש לבדוק את התשובה בטופס.")
         count = 0
 
-  
     neighborhood = normalize_neighborhood(row.get("כתובת", ""))
-
     transport_answer = field(row, "אופן הגעה לאירוע")
     # Unknown transport answers are NOT treated as requiring a bus.
     needs_transport = "הסעה" in transport_answer and "לא" not in transport_answer
@@ -347,31 +345,49 @@ with tab2:
         issues = validate_family(family)
         assignment = assignments.get(family["id"])
 
-        with st.expander(
-            f'משפחה {family["id"]} — {family["contact"]}'
-        ):
-            st.write("איש קשר:", family["contact"])
-            st.write("אימייל:", family["email"])
-            st.write("שכונה:", family["neighborhood"])
-            st.write("משתתפים:", len(family["members"]))
-            st.write("אופן הגעה:", family["transport_answer"])
+        with st.expander(f'👨‍👩‍👧‍👦 משפחה {family["id"]} — {family["contact"]}'):
+            left, right = st.columns(2)
+            with left:
+                st.markdown(f'**איש קשר:** {family["contact"] or "לא צוין"}')
+                st.markdown(f'**דוא״ל:** {family["email"] or "לא צוין"}')
+                st.markdown(f'**שכונה:** {family["neighborhood"] or "לא צוינה"}')
+            with right:
+                st.markdown(f'**מספר משתתפים:** {len(family["members"])}')
+                st.markdown(f'**אופן הגעה:** {family["transport_answer"] or "לא צוין"}')
+                if assignment and assignment.get("bus") is not None:
+                    st.markdown(f'**אוטובוס:** {assignment["bus"]}')
+                    st.markdown(f'**נקודת איסוף:** {assignment["pickup"]}')
+                elif family["transport"]:
+                    st.markdown('**שיבוץ הסעה:** טרם שובץ')
+                else:
+                    st.markdown('**שיבוץ הסעה:** לא נדרש')
 
             if issues:
-                st.error(" | ".join(issues))
+                st.warning("נדרש בירור: " + " | ".join(issues))
             else:
-                st.success("ההרשמה עברה בדיקות תקינות")
+                st.success("פרטי ההרשמה הבסיסיים תקינים")
 
-            st.dataframe(
-                pd.DataFrame(family["members"]),
-                use_container_width=True
-            )
+            st.markdown("**פרטי המשתתפים**")
+            member_rows = []
+            for member in family["members"]:
+                allergy_text = str(member.get("allergy") or "").strip()
+                member_rows.append({
+                    "משתתף": member.get("name", ""),
+                    "סוג ארוחה": member.get("meal") or "לא צוין",
+                    "אלרגיות / מגבלות": allergy_text or "לא צוין פירוט — יש לבדוק בטופס",
+                })
+            if member_rows:
+                st.dataframe(pd.DataFrame(member_rows), hide_index=True, use_container_width=True)
+            else:
+                st.info("לא נמצאו משתתפים בהרשמה זו")
 
-            if assignment:
-                st.write("אוטובוס:", assignment["bus"])
-                st.write("נקודת איסוף:", assignment["pickup"])
-
-            st.markdown("**תשובות מקוריות מהטופס**")
-            st.json(family["original_answers"])
+            with st.expander("📄 הצגת התשובות המקוריות מהטופס"):
+                original_rows = [
+                    {"שאלה": str(key), "תשובה": str(value)}
+                    for key, value in family["original_answers"].items()
+                    if value is not None and str(value).strip()
+                ]
+                st.dataframe(pd.DataFrame(original_rows), hide_index=True, use_container_width=True)
 
 with tab3:
     st.subheader("שיבוץ אוטובוסים")
