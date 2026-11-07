@@ -13,6 +13,21 @@ st.set_page_config(
 st.title("📊 מערכת ניהול אירוע קהילתי")
 st.info("גרסת הדגמה — כל הנתונים דמיוניים")
 
+st.subheader("📂 טעינת הרשמות מהטופס")
+
+uploaded_file = st.file_uploader(
+    "בחרי קובץ Excel של ההרשמות",
+    type=["xlsx"]
+)
+
+if uploaded_file is not None:
+    df = pd.read_excel(uploaded_file)
+
+    st.success("קובץ ההרשמות נטען בהצלחה!")
+
+    st.write("מספר הרשמות בקובץ:", len(df))
+    st.write("מספר עמודות:", len(df.columns))
+
 BUS_CAPACITY = 50
 MIN_NEW_BUS_PASSENGERS = 10
 NEIGHBORHOODS = ["א", "ב", "ג", "ד"]
