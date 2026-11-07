@@ -127,6 +127,7 @@ def validate_family(family):
 
 
 
+
 def assign_buses(families, capacity):
     buses = []
     assignments = {}
@@ -142,19 +143,15 @@ def assign_buses(families, capacity):
         reverse=True
     )
 
-    # אוטובוס אחד לכל שכונה שיש בה ביקוש
-    active_neighborhoods = [
-        n for n in NEIGHBORHOODS
-        if any(f["neighborhood"] == n for f in eligible)
-    ]
-
-    for neighborhood in active_neighborhoods:
-        buses.append({
+    def add_bus(neighborhood):
+        bus = {
             "number": len(buses) + 1,
             "pickup": neighborhood,
             "remaining": capacity,
             "families": []
-        })
+        }
+        buses.append(bus)
+        return bus
 
     def place_family(family, bus):
         size = len(family["members"])
@@ -167,7 +164,15 @@ def assign_buses(families, capacity):
             "pickup": bus["pickup"]
         }
 
-    # קודם משבצים כל משפחה בשכונה שלה
+    # אוטובוס בסיסי לכל שכונה עם ביקוש להסעה
+    for neighborhood in NEIGHBORHOODS:
+        if any(
+            f["neighborhood"] == neighborhood
+            for f in eligible
+        ):
+            add_bus(neighborhood)
+
+    # שלב ראשון: שיבוץ בשכונת המגורים
     for family in eligible:
         size = len(family["members"])
         home = family["neighborhood"]
@@ -190,36 +195,9 @@ def assign_buses(families, capacity):
         else:
             waiting.append(family)
 
-    # אוטובוסים משכונות ריקות עוברים לשכונות עמוסות
-    while waiting and len(buses) < 4:
-        overflow = {
-            n: sum(
-                len(f["members"])
-                for f in waiting
-                if f["neighborhood"] == n
-            )
-            for n in NEIGHBORHOODS
-        }
+    # שלב שני: שימוש במקומות פנויים בשכונות אחרות
+    still_waiting = []
 
-        pickup = max(overflow, key=overflow.get)
-
-        new_bus = {
-            "number": len(buses) + 1,
-            "pickup": pickup,
-            "remaining": capacity,
-            "families": []
-        }
-        buses.append(new_bus)
-
-        for family in waiting[:]:
-            if (
-                family["neighborhood"] == pickup
-                and len(family["members"]) <= new_bus["remaining"]
-            ):
-                place_family(family, new_bus)
-                waiting.remove(family)
-
-    # עודפים עוברים לאוטובוס הקרוב עם מספיק מקום
     for family in waiting:
         size = len(family["members"])
         home = family["neighborhood"]
@@ -239,13 +217,40 @@ def assign_buses(families, capacity):
             )
             place_family(family, chosen)
         else:
-            assignments[family["id"]] = {
-                "status": "ממתין לשיבוץ",
-                "bus": None,
-                "pickup": None
-            }
+            still_waiting.append(family)
+
+    # שלב שלישי: הקצאת אוטובוסים נוספים מתוך הארבעה
+    while still_waiting and len(buses) < 4:
+        overflow = {
+            n: sum(
+                len(f["members"])
+                for f in still_waiting
+                if f["neighborhood"] == n
+            )
+            for n in NEIGHBORHOODS
+        }
+
+        pickup = max(overflow, key=overflow.get)
+        new_bus = add_bus(pickup)
+
+        for family in still_waiting[:]:
+            if (
+                family["neighborhood"] == pickup
+                and len(family["members"]) <= new_bus["remaining"]
+            ):
+                place_family(family, new_bus)
+                still_waiting.remove(family)
+
+    # משפחות שלא נמצא להן מקום
+    for family in still_waiting:
+        assignments[family["id"]] = {
+            "status": "ממתין לשיבוץ",
+            "bus": None,
+            "pickup": None
+        }
 
     return buses, assignments
+
 
 
 
