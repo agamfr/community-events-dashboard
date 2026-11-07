@@ -123,6 +123,9 @@ def validate_family(family):
 
 
 
+
+
+
 def assign_buses(families, capacity):
     buses = []
     assignments = {}
@@ -133,8 +136,10 @@ def assign_buses(families, capacity):
         if f["transport"] and not validate_family(f)
     ]
 
-    # Large families first
-    eligible.sort(key=lambda f: len(f["members"]), reverse=True)
+    eligible.sort(
+        key=lambda f: len(f["members"]),
+        reverse=True
+    )
 
     for family in eligible:
         size = len(family["members"])
@@ -148,21 +153,20 @@ def assign_buses(families, capacity):
             }
             continue
 
-        # Search existing buses with enough seats
         candidates = [
             bus for bus in buses
             if bus["remaining"] >= size
         ]
 
-        candidates.sort(
-            key=lambda bus: (
-                DISTANCES[home][bus["pickup"]],
-                bus["remaining"] - size
-            )
-        )
-
         if candidates:
-            chosen = candidates[0]
+            chosen = min(
+                candidates,
+                key=lambda bus: (
+                    DISTANCES[home][bus["pickup"]],
+                    bus["remaining"] - size
+                )
+            )
+
             chosen["remaining"] -= size
             chosen["families"].append(family["id"])
 
@@ -174,17 +178,17 @@ def assign_buses(families, capacity):
         else:
             waiting.append(family)
 
-    # Create buses only when enough people are waiting
-while waiting and (
-    not buses
-    or sum(len(f["members"]) for f in waiting) >= MIN_NEW_BUS_PASSENGERS
-):       
+    while waiting and (
+        not buses
+        or sum(len(f["members"]) for f in waiting)
+        >= MIN_NEW_BUS_PASSENGERS
+    ):
         group = []
         seats = capacity
 
-        # Choose a group that fits in one bus
         for family in waiting[:]:
             size = len(family["members"])
+
             if size <= seats:
                 group.append(family)
                 seats -= size
@@ -193,7 +197,6 @@ while waiting and (
         if not group:
             break
 
-        # Find pickup neighborhood with lowest total distance
         pickup = min(
             NEIGHBORHOODS,
             key=lambda neighborhood: sum(
@@ -219,8 +222,6 @@ while waiting and (
                 "pickup": pickup
             }
 
-  
-    # Families still waiting
     for family in waiting:
         assignments[family["id"]] = {
             "status": "ממתין לשיבוץ",
@@ -229,6 +230,7 @@ while waiting and (
         }
 
     return buses, assignments
+
 
 
 
