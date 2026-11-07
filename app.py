@@ -104,7 +104,9 @@ for index, row in enumerate(registrations, start=1):
         st.warning(f"הרשמה {index}: לא זוהה מספר משתתפים. יש לבדוק את התשובה בטופס.")
         count = 0
 
-    neighborhood = normalize_neighborhood(field(row, "כתובת"))
+  
+    neighborhood = normalize_neighborhood(row.get("כתובת", ""))
+
     transport_answer = field(row, "אופן הגעה לאירוע")
     # Unknown transport answers are NOT treated as requiring a bus.
     needs_transport = "הסעה" in transport_answer and "לא" not in transport_answer
