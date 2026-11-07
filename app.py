@@ -103,8 +103,14 @@ for index, row in enumerate(registrations, start=1):
     )
 
 
+   
     try:
-        count = int(float(str(raw_count).strip()))
+        count = int(
+            str(raw_count)
+            .replace("משתתפים", "")
+            .replace("משתתף", "")
+            .strip()
+        )
     except (ValueError, TypeError):
         count = 0
 
