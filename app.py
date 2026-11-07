@@ -368,33 +368,27 @@ with tab1:
     ]
 
    
+   
     st.subheader("אלרגיות ומגבלות שדווחו")
 
     if allergies:
         allergy_counts = pd.Series(allergies).value_counts()
+
         allergy_table = pd.DataFrame({
             "אלרגיה או מגבלה": allergy_counts.index,
             "מספר דיווחים": allergy_counts.values
         })
 
-        fig = px.bar(
+        st.dataframe(
             allergy_table,
-            x="אלרגיה או מגבלה",
-            y="מספר דיווחים",
-            text="מספר דיווחים"
+            hide_index=True,
+            use_container_width=True
         )
 
-        fig.update_traces(textposition="outside")
-        fig.update_layout(
-            font=dict(size=18),
-            showlegend=False
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
         st.caption("הנתונים מבוססים על הדיווחים בטופס.")
-
     else:
         st.info("לא נמצאו דיווחי אלרגיות עם פירוט")
+
 
 with tab2:
     st.subheader("כרטיסי משפחות")
