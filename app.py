@@ -14,6 +14,7 @@ st.title("📊 מערכת ניהול אירוע קהילתי")
 st.info("גרסת הדגמה — כל הנתונים דמיוניים")
 
 BUS_CAPACITY = 50
+MIN_NEW_BUS_PASSENGERS = 10
 NEIGHBORHOODS = ["א", "ב", "ג", "ד"]
 
 # מרחקים דמיוניים בין שכונות
@@ -121,21 +122,19 @@ def validate_family(family):
     return issues
 
 
-# שיבוץ משפחות לאוטובוסים
+
 def assign_buses(families, capacity):
     buses = []
     assignments = {}
+    waiting = []
 
     eligible = [
         f for f in families
         if f["transport"] and not validate_family(f)
     ]
 
-    # משפחות גדולות קודם, כדי לצמצם פיצולים
-    eligible.sort(
-        key=lambda f: len(f["members"]),
-        reverse=True
-    )
+    # Large families first
+    eligible.sort(key=lambda f: len(f["members"]), reverse=True)
 
     for family in eligible:
         size = len(family["members"])
@@ -145,11 +144,11 @@ def assign_buses(families, capacity):
             assignments[family["id"]] = {
                 "status": "דורש טיפול ידני",
                 "bus": None,
-                "pickup": None,
+                "pickup": None
             }
             continue
 
-        # מחפשים אוטובוס קיים, לפי קרבה
+        # Search existing buses with enough seats
         candidates = [
             bus for bus in buses
             if bus["remaining"] >= size
@@ -164,26 +163,69 @@ def assign_buses(families, capacity):
 
         if candidates:
             chosen = candidates[0]
-        else:
-            # פותחים אוטובוס רק כשאין מקום בקיים
-            chosen = {
-                "number": len(buses) + 1,
-                "pickup": home,
-                "remaining": capacity,
-                "families": [],
+            chosen["remaining"] -= size
+            chosen["families"].append(family["id"])
+
+            assignments[family["id"]] = {
+                "status": "שובץ",
+                "bus": chosen["number"],
+                "pickup": chosen["pickup"]
             }
-            buses.append(chosen)
+        else:
+            waiting.append(family)
 
-        chosen["remaining"] -= size
-        chosen["families"].append(family["id"])
+    # Create buses only when enough people are waiting
+    while sum(len(f["members"]) for f in waiting) >= MIN_NEW_BUS_PASSENGERS:
+        group = []
+        seats = capacity
 
+        # Choose a group that fits in one bus
+        for family in waiting[:]:
+            size = len(family["members"])
+            if size <= seats:
+                group.append(family)
+                seats -= size
+                waiting.remove(family)
+
+        if not group:
+            break
+
+        # Find pickup neighborhood with lowest total distance
+        pickup = min(
+            NEIGHBORHOODS,
+            key=lambda neighborhood: sum(
+                DISTANCES[f["neighborhood"]][neighborhood]
+                * len(f["members"])
+                for f in group
+            )
+        )
+
+        new_bus = {
+            "number": len(buses) + 1,
+            "pickup": pickup,
+            "remaining": seats,
+            "families": [f["id"] for f in group]
+        }
+
+        buses.append(new_bus)
+
+        for family in group:
+            assignments[family["id"]] = {
+                "status": "שובץ",
+                "bus": new_bus["number"],
+                "pickup": pickup
+            }
+
+    # Families still waiting
+    for family in waiting:
         assignments[family["id"]] = {
-            "status": "שובץ",
-            "bus": chosen["number"],
-            "pickup": chosen["pickup"],
+            "status": "ממתין לשיבוץ",
+            "bus": None,
+            "pickup": None
         }
 
     return buses, assignments
+
 
 
 capacity = st.sidebar.number_input(
