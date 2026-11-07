@@ -10,6 +10,27 @@ st.set_page_config(
     layout="wide"
 )
 
+# הגנה על הדשבורד באמצעות סיסמה
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("🔐 כניסה למערכת ניהול האירוע")
+
+    password = st.text_input(
+        "הכניסי את סיסמת המארגנים",
+        type="password"
+    )
+
+    if st.button("כניסה"):
+        if password == st.secrets["APP_PASSWORD"]:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("סיסמה שגויה")
+
+    st.stop()
+
 st.title("📊 מערכת ניהול אירוע קהילתי")
 st.info("גרסת הדגמה — כל הנתונים דמיוניים")
 
