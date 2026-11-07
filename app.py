@@ -32,7 +32,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 st.title("📊 מערכת ניהול אירוע קהילתי")
-st.info("גרסת הדגמה — כל הנתונים דמיוניים")
+
 
 
 BUS_CAPACITY = 50
@@ -71,6 +71,18 @@ if not sheet_data.get("success"):
     st.stop()
 
 registrations = sheet_data["registrations"]
+
+if registrations:
+    st.write("בדיקת שמות עמודות:")
+    st.write(list(registrations[0].keys()))
+
+    st.write("בדיקת מספר משתתפים:")
+    for row in registrations:
+        st.write([
+            (key, str(value))
+            for key, value in row.items()
+            if "משתתפים" in key
+        ])
 
 def get_value(row, key, default=""):
     return row.get(key, default)
