@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import math
 import json
-
+import requests
 st.set_page_config(
     page_title="ניהול אירוע קהילתי",
     page_icon="🚌",
@@ -34,20 +34,6 @@ if not st.session_state.authenticated:
 st.title("📊 מערכת ניהול אירוע קהילתי")
 st.info("גרסת הדגמה — כל הנתונים דמיוניים")
 
-st.subheader("📂 טעינת הרשמות מהטופס")
-
-uploaded_file = st.file_uploader(
-    "בחרי קובץ Excel של ההרשמות",
-    type=["xlsx"]
-)
-
-if uploaded_file is not None:
-    df = pd.read_excel(uploaded_file)
-
-    st.success("קובץ ההרשמות נטען בהצלחה!")
-
-    st.write("מספר הרשמות בקובץ:", len(df))
-    st.write("מספר עמודות:", len(df.columns))
 
 BUS_CAPACITY = 50
 MIN_NEW_BUS_PASSENGERS = 10
@@ -61,78 +47,77 @@ DISTANCES = {
     "ד": {"א": 8, "ב": 6, "ג": 3, "ד": 0},
 }
 
-# משפחות דמיוניות
-families = [
-    {
-        "id": "001",
-        "contact": "ישראל ישראלי",
-        "email": "family1@example.com",
-        "neighborhood": "א",
-        "transport": True,
-        "members": [
-            {"name": "ישראל", "meal": "רגילה", "allergy": "אין"},
-            {"name": "דנה", "meal": "צמחונית", "allergy": "אין"},
-            {"name": "נועה", "meal": "רגילה", "allergy": "בוטנים"},
-            {"name": "איתי", "meal": "רגילה", "allergy": "אין"},
-        ],
-        "original_answers": {
-            "שכונת מגורים": "א",
-            "מספר משתתפים": 4,
-            "זקוקים להסעה": "כן",
-        },
-    },
-    {
-        "id": "002",
-        "contact": "משפחת כהן",
-        "email": "family2@example.com",
-        "neighborhood": "א",
-        "transport": True,
-        "members": [
-            {"name": "רון", "meal": "רגילה", "allergy": "אין"},
-            {"name": "מיה", "meal": "טבעונית", "allergy": "גלוטן"},
-            {"name": "עדי", "meal": "רגילה", "allergy": "אין"},
-        ],
-        "original_answers": {
-            "שכונת מגורים": "א",
-            "מספר משתתפים": 3,
-            "זקוקים להסעה": "כן",
-        },
-    },
-    {
-        "id": "003",
-        "contact": "משפחת לוי",
-        "email": "family3@example.com",
-        "neighborhood": "ב",
-        "transport": True,
-        "members": [
-            {"name": "אור", "meal": "רגילה", "allergy": "אין"},
-            {"name": "טל", "meal": "צמחונית", "allergy": "אין"},
-        ],
-        "original_answers": {
-            "שכונת מגורים": "ב",
-            "מספר משתתפים": 2,
-            "זקוקים להסעה": "כן",
-        },
-    },
-    {
-        "id": "004",
-        "contact": "משפחת ברק",
-        "email": "family4@example.com",
-        "neighborhood": "ד",
-        "transport": False,
-        "members": [
-            {"name": "שחר", "meal": "רגילה", "allergy": "אין"},
-            {"name": "רוני", "meal": "רגילה", "allergy": "אין"},
-        ],
-        "original_answers": {
-            "שכונת מגורים": "ד",
-            "מספר משתתפים": 2,
-            "זקוקים להסעה": "לא",
-        },
-    },
-]
 
-# בדיקת תקינות הרשמות
+# טעינת משפחות מ-Google Sheets
+import requests
+import streamlit as st
+
+SHEETS_URL = st.secrets["SHEETS_URL"]
+API_TOKEN = st.secrets["API_TOKEN"]
+
+
+response = requests.post(
+    SHEETS_URL,
+    json={"token": API_TOKEN},
+    timeout=30
+)
+
+response.raise_for_status()
+
+sheet_data = response.json()
+
+if not sheet_data.get("success"):
+    st.error("לא הצלחנו לטעון את ההרשמות")
+    st.stop()
+
+registrations = sheet_data["registrations"]
+
+def get_value(row, key, default=""):
+    return row.get(key, default)
+
+families = []
+
+for index, row in enumerate(registrations, start=1):
+    count = int(get_value(
+        row, "4. מספר המשתתפים הכולל בהרשמה זו", 0
+    ) or 0)
+
+    neighborhood = str(get_value(row, "כתובת", "")).strip()
+
+    transport_answer = str(get_value(
+        row, "5. אופן הגעה לאירוע", ""
+    )).strip()
+
+    members = []
+
+    for number in range(1, count + 1):
+        members.append({
+            "name": f"משתתף {number}",
+            "meal": get_value(
+                row, f"העדפת תזונה עיקרית [משתתף {number}]"
+            ),
+            "allergy": get_value(
+                row, f"פירוט המגבלה או האלרגיה [משתתף {number}]",
+                "אין"
+            )
+        })
+
+    families.append({
+        "id": str(index).zfill(3),
+        "contact": get_value(
+            row, "1. שם מלא איש הקשר המרכזי"
+        ),
+        "email": get_value(
+            row, "3. כתובת דואר אלקטרוני"
+        ),
+        "neighborhood": neighborhood,
+        "transport": transport_answer != "מגיעים עצמאית",
+        "members": members,
+        "original_answers": row
+    })
+
+st.success(f"נטענו {len(families)} משפחות מ-Google Sheets")
+
 def validate_family(family):
     issues = []
 
