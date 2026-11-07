@@ -78,9 +78,17 @@ def get_value(row, key, default=""):
 families = []
 
 for index, row in enumerate(registrations, start=1):
-    count = int(get_value(
-        row, "4. מספר המשתתפים הכולל בהרשמה זו", 0
-    ) or 0)
+    
+raw_count = get_value(
+    row,
+    "4. מספר המשתתפים הכולל בהרשמה זו",
+    0
+)
+
+try:
+    count = int(float(str(raw_count).strip()))
+except (ValueError, TypeError):
+    count = 0
 
     neighborhood = str(get_value(row, "כתובת", "")).strip()
 
