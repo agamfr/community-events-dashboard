@@ -4,6 +4,7 @@ import pandas as pd
 import math
 import json
 import requests
+import re
 st.set_page_config(
     page_title="ניהול אירוע קהילתי",
     page_icon="🚌",
@@ -48,137 +49,101 @@ DISTANCES = {
 }
 
 
-# טעינת משפחות מ-Google Sheets
-import requests
-import streamlit as st
-
+# טעינת הרשמות מ-Google Sheets
 SHEETS_URL = st.secrets["SHEETS_URL"]
 API_TOKEN = st.secrets["API_TOKEN"]
 
-
-response = requests.post(
-    SHEETS_URL,
-    json={"token": API_TOKEN},
-    timeout=30
-)
-
-response.raise_for_status()
-
-sheet_data = response.json()
-
-if not sheet_data.get("success"):
-    st.error("לא הצלחנו לטעון את ההרשמות")
+try:
+    response = requests.post(SHEETS_URL, json={"token": API_TOKEN}, timeout=30)
+    response.raise_for_status()
+    sheet_data = response.json()
+    if not sheet_data.get("success"):
+        st.error("שגיאה בטעינת ההרשמות מ-Google Sheets")
+        st.stop()
+    registrations = sheet_data.get("registrations", [])
+except (requests.RequestException, ValueError) as exc:
+    st.error("לא ניתן להתחבר ל-Google Sheets. בדקי את כתובת השירות ואת הפריסה.")
     st.stop()
 
-registrations = sheet_data["registrations"]
 
-if registrations:
-    st.write("בדיקת שמות עמודות:")
-    st.write(list(registrations[0].keys()))
+def field(row, phrase, default=""):
+    """Find the first populated matching field, including duplicate headers with (2), (3)..."""
+    for key, value in row.items():
+        if phrase in str(key) and value is not None and str(value).strip():
+            return str(value).strip()
+    return default
 
-    st.write("בדיקת מספר משתתפים:")
-    for row in registrations:
-        st.write([
-            (key, str(value))
-            for key, value in row.items()
-            if "משתתפים" in key
-        ])
 
-def get_value(row, key, default=""):
-    return row.get(key, default)
+def participant_field(row, phrase, number, default=""):
+    # Exact participant index, including repeated Form section headers
+    pattern = re.compile(r"\[משתתף\s*" + str(number) + r"\]")
+    for key, value in row.items():
+        if phrase in str(key) and pattern.search(str(key)) and value is not None and str(value).strip():
+            return str(value).strip()
+    return default
+
+
+def parse_count(value):
+    match = re.search(r"\d+", str(value))
+    return int(match.group()) if match else None
+
+
+def normalize_neighborhood(value):
+    text = str(value).strip()
+    if text in NEIGHBORHOODS:
+        return text
+    match = re.search(r"שכונה\s*([אבגד])", text)
+    return match.group(1) if match else text
+
 
 families = []
-
-
 for index, row in enumerate(registrations, start=1):
-   
-    raw_count = next(
-        (
-            value
-            for key, value in row.items()
-            if "מספר המשתתפים הכולל" in key
-            and str(value).strip()
-        ),
-        0
-    )
-
-
-   
-    try:
-        count = int(
-            str(raw_count)
-            .replace("משתתפים", "")
-            .replace("משתתף", "")
-            .strip()
-        )
-    except (ValueError, TypeError):
+    raw_count = field(row, "מספר המשתתפים הכולל")
+    count = parse_count(raw_count)
+    if count is None:
+        st.warning(f"הרשמה {index}: לא זוהה מספר משתתפים. יש לבדוק את התשובה בטופס.")
         count = 0
 
-    neighborhood = str(get_value(row, "כתובת", "")).strip()
-
-    transport_answer = str(get_value(
-        row, "5. אופן הגעה לאירוע", ""
-    )).strip()
+    neighborhood = normalize_neighborhood(field(row, "כתובת"))
+    transport_answer = field(row, "אופן הגעה לאירוע")
+    # Unknown transport answers are NOT treated as requiring a bus.
+    needs_transport = "הסעה" in transport_answer and "לא" not in transport_answer
 
     members = []
-
     for number in range(1, count + 1):
         members.append({
             "name": f"משתתף {number}",
-            "meal": get_value(
-                row, f"העדפת תזונה עיקרית [משתתף {number}]"
-            ),
-            "allergy": get_value(
-                row, f"פירוט המגבלה או האלרגיה [משתתף {number}]",
-                "אין"
-            )
+            "meal": participant_field(row, "העדפת תזונה עיקרית", number),
+            "allergy": participant_field(row, "פירוט המגבלה או האלרגיה", number),
         })
 
     families.append({
         "id": str(index).zfill(3),
-        "contact": get_value(
-            row, "1. שם מלא איש הקשר המרכזי"
-        ),
-        "email": get_value(
-            row, "3. כתובת דואר אלקטרוני"
-        ),
+        "contact": field(row, "שם מלא איש הקשר המרכזי"),
+        "email": field(row, "כתובת דואר אלקטרוני"),
         "neighborhood": neighborhood,
-        "transport": transport_answer != "מגיעים עצמאית",
+        "transport": needs_transport,
+        "transport_answer": transport_answer,
         "members": members,
-        "original_answers": row
+        "expected_count": count,
+        "original_answers": row,
     })
 
 st.success(f"נטענו {len(families)} משפחות מ-Google Sheets")
 
+
 def validate_family(family):
     issues = []
-
     if not family.get("email") or "@" not in family["email"]:
         issues.append("כתובת אימייל חסרה או לא תקינה")
-
-    members = family.get("members", [])
-    expected = family.get("original_answers", {}).get(
-        "מספר משתתפים"
-    )
-
-    if expected != len(members):
-        issues.append("מספר המשתתפים אינו תואם לטופס")
-
-    for index, member in enumerate(members, start=1):
-        if not member.get("name"):
-            issues.append(f"חסר שם למשתתף {index}")
-        if not member.get("meal"):
-            issues.append(f"חסרה בחירת ארוחה למשתתף {index}")
-        if not member.get("allergy"):
-            issues.append(f"חסר מידע אלרגיות למשתתף {index}")
-
+    if family["expected_count"] != len(family["members"]) or not family["members"]:
+        issues.append("מספר המשתתפים חסר או אינו תואם")
+    if family["neighborhood"] not in NEIGHBORHOODS:
+        issues.append("שכונה לא מזוהה")
+    if not family["transport_answer"]:
+        issues.append("חסרה תשובה על אופן ההגעה")
+    # Missing meal/allergy details should be reviewed, but should not block bus assignment.
     return issues
-
-
-
-
-
-
 
 
 def assign_buses(families, capacity):
@@ -361,7 +326,7 @@ with tab1:
 
     allergies = [
         m["allergy"] for m in all_members
-        if m["allergy"] != "אין"
+        if m["allergy"] and m["allergy"] != "אין"
     ]
 
     st.subheader("אלרגיות שדווחו")
@@ -371,7 +336,7 @@ with tab1:
             use_container_width=True
         )
     else:
-        st.success("לא דווחו אלרגיות")
+        st.info("לא נמצאו פירוטי אלרגיות בשדות שנקראו; יש לבדוק גם את התשובות המקוריות")
 
 with tab2:
     st.subheader("כרטיסי משפחות")
@@ -387,6 +352,7 @@ with tab2:
             st.write("אימייל:", family["email"])
             st.write("שכונה:", family["neighborhood"])
             st.write("משתתפים:", len(family["members"]))
+            st.write("אופן הגעה:", family["transport_answer"])
 
             if issues:
                 st.error(" | ".join(issues))
