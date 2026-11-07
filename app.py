@@ -79,11 +79,17 @@ families = []
 
 
 for index, row in enumerate(registrations, start=1):
-    raw_count = get_value(
-        row,
-        "4. מספר המשתתפים הכולל בהרשמה זו",
+   
+    raw_count = next(
+        (
+            value
+            for key, value in row.items()
+            if "מספר המשתתפים הכולל" in key
+            and str(value).strip()
+        ),
         0
     )
+
 
     try:
         count = int(float(str(raw_count).strip()))
