@@ -325,16 +325,21 @@ with tab1:
     st.bar_chart(meal_counts)
 
     allergies = [
-        m["allergy"] for m in all_members
-        if m["allergy"] and m["allergy"] != "אין"
+        str(m.get("allergy", "")).strip()
+        for m in all_members
+        if str(m.get("allergy") or "").strip()
+        and str(m.get("allergy") or "").strip() not in ("אין", "ללא", "לא", "אין אלרגיה")
     ]
 
-    st.subheader("אלרגיות שדווחו")
+    st.subheader("אלרגיות ומגבלות שדווחו")
     if allergies:
-        st.dataframe(
-            pd.Series(allergies).value_counts(),
-            use_container_width=True
-        )
+        allergy_counts = pd.Series(allergies).value_counts()
+        allergy_table = pd.DataFrame({
+            "אלרגיה / מגבלה כפי שדווחה": allergy_counts.index,
+            "מספר דיווחים": allergy_counts.values,
+        })
+        st.dataframe(allergy_table, hide_index=True, use_container_width=True)
+        st.caption("הנתונים מוצגים כפי שהוזנו בטופס; מומלץ לבדוק את פירוט המגבלות לפני האירוע.")
     else:
         st.info("לא נמצאו פירוטי אלרגיות בשדות שנקראו; יש לבדוק גם את התשובות המקוריות")
 
@@ -390,20 +395,37 @@ with tab2:
                 st.dataframe(pd.DataFrame(original_rows), hide_index=True, use_container_width=True)
 
 with tab3:
-    st.subheader("שיבוץ אוטובוסים")
+    st.subheader("🚌 שיבוץ אוטובוסים")
+    st.caption("השיבוץ הוא הצעה אוטומטית ודורש אישור מארגן.")
+
+    if not buses:
+        st.info("אין כרגע אוטובוסים משובצים. ניתן לבדוק את פרטי ההסעה בכרטיסי המשפחות.")
 
     for bus in buses:
         used = capacity - bus["remaining"]
-
-        st.markdown(f'### 🚌 אוטובוס {bus["number"]}')
-        st.write("נקודת איסוף:", bus["pickup"])
-        st.progress(used / capacity)
-        st.write(f"{used}/{capacity} מקומות תפוסים")
-        st.write("משפחות:", ", ".join(bus["families"]))
-
-    st.caption(
-        "השיבוץ הוא הצעה אוטומטית ודורש אישור מארגן."
-    )
+        family_ids = bus["families"]
+        with st.container(border=True):
+            st.markdown(f'### 🚌 אוטובוס {bus["number"]}')
+            left, middle, right = st.columns(3)
+            left.metric("נקודת איסוף", f'שכונה {bus["pickup"]}')
+            middle.metric("נוסעים משובצים", used)
+            right.metric("מקומות פנויים", bus["remaining"])
+            st.progress(min(1.0, max(0.0, used / capacity)))
+            st.caption(f"{used} מתוך {capacity} מקומות תפוסים")
+            st.markdown("**משפחות משובצות**")
+            if family_ids:
+                family_lookup = {family["id"]: family for family in families}
+                rows = []
+                for family_id in family_ids:
+                    family = family_lookup.get(family_id)
+                    rows.append({
+                        "מספר משפחה": family_id,
+                        "איש קשר": family["contact"] if family else "לא ידוע",
+                        "מספר נוסעים": len(family["members"]) if family else "לא ידוע",
+                    })
+                st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            else:
+                st.info("טרם שובצו משפחות לאוטובוס זה")
 
 with tab4:
     st.subheader("הכנת נתונים לשלב שליחת המיילים")
